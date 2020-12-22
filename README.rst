@@ -36,15 +36,15 @@ Contribute to documentation
 
 To contribute, you need to fork the repository, do your modifications and create a new pull request. 
 
-.. note: **Please make sure you have the full pyats package installed via ```pip install pyats[full]```.**
+.. note:: 
+        
+        **Please make sure you have the full pyats package installed via ```pip install pyats[full]```.**
 
 To build the docs locally on your machine. Please follow the instructions below 
 
   - Go to the `dyntopo Github repository <https://github.com/CiscoTestAutomation/dyntopo>`
 
   - On the top right corner, click ```Fork```. (see `<https://help.github.com/en/articles/fork-a-repo>`)
-
-<img width="421" alt="Screen Shot 2020-12-21 at 2 37 19 PM" src="https://user-images.githubusercontent.com/30438439/102815289-1e75e700-439a-11eb-92bc-e424ddce9758.png">
   
   - In your terminal, clone the repo using the command shown below: 
     ```shell
