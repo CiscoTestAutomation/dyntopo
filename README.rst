@@ -36,9 +36,7 @@ Contribute to documentation
 
 To contribute, you need to fork the repository, do your modifications and create a new pull request. 
 
-.. note:: 
-        
-        **Please make sure you have the full pyats package installed via ```pip install pyats[full]```.**
+**Please make sure you have the full pyats package installed via ```pip install pyats[full]```.**
 
 To build the docs locally on your machine. Please follow the instructions below 
 
