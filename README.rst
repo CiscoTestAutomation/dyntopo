@@ -40,29 +40,25 @@ To contribute, you need to fork the repository, do your modifications and create
 
 To build the docs locally on your machine. Please follow the instructions below 
 
-  - Go to the `dyntopo Github repository <https://github.com/CiscoTestAutomation/dyntopo>`
+- Go to the `dyntopo Github repository <https://github.com/CiscoTestAutomation/dyntopo>`
 
-  - On the top right corner, click ```Fork```. (see `<https://help.github.com/en/articles/fork-a-repo>`)
+- On the top right corner, click ```Fork```. (see `<https://help.github.com/en/articles/fork-a-repo>`)
   
-  - In your terminal, clone the repo using the command shown below: 
-    ```shell
-    git clone https://github.com/<your_github_username>/dyntopo.git
-    ```
+- In your terminal, clone the repo using the command shown below: ``git clone https://github.com/<your_github_username>/dyntopo.git``
 
-  - ```cd dyntopo/docs```
+- ``cd dyntopo/docs``
   
-  - Use ```make install_build_deps```  to install all of the build dependencies
+- Use ``make install_build_deps```  to install all of the build dependencies
   
-  - Run ```make docs``` to generate documentation in HTML
+- Run ``make docs``` to generate documentation in HTML
 
-  - Wait until you see ```Done``` in your terminal
+- Wait until you see ```Done``` in your terminal
   
-  - The documentation is now built and stored under the directory 
-  ```unicon.plugins/__build__```
+- The documentation is now built and stored under the directory ```dyntopo/__build__```
 
-  - Run ```make serve``` to view the documentation on your browser
+- Run ```make serve``` to view the documentation on your browser
 
-    - Please create a PR after you have made your changes (see [commit your changes](https://pubhub.devnetcloud.com/media/pyats-development-guide/docs/contribute/contribute.html#commit-your-changes) & [open a PR](https://pubhub.devnetcloud.com/media/pyats-development-guide/docs/contribute/contribute.html#open-a-pull-request))
+- Please create a PR after you have made your changes (see [commit your changes](https://pubhub.devnetcloud.com/media/pyats-development-guide/docs/contribute/contribute.html#commit-your-changes) & [open a PR](https://pubhub.devnetcloud.com/media/pyats-development-guide/docs/contribute/contribute.html#open-a-pull-request))
 
 Here are a few examples that could be great pull request:
 
