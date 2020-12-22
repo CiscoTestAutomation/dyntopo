@@ -1,0 +1,92 @@
+.. note::
+
+        This document may be found in the `examples/dyntopo_local` directory
+        of a pyATS environment.  All examples assume this is the
+        current working directory.
+
+        For better viewing/reading of this document, use restview_.
+
+        .. _restview: https://pypi.python.org/pypi/restview
+
+        For example::
+
+            pip install restview
+            restview -l 0:8080 README.rst
+
+        And then browse to http://your_machine:8080
+
+
+Please refer to the bringup `online documentation`_.
+
+.. _online documentation: http://wwwin-pyats.cisco.com/cisco-shared/dyntopo/latest/local.html
+
+
+Examples of Dynamic Topology Bringup
+====================================
+
+Here are examples of various workflows for bringing up a
+dynamic topology under pyAts and running tests against it:
+
+1. `Decoupled launch`_
+
+2. `easypy launch`_
+
+
+
+How to reload a dIOL
+^^^^^^^^^^^^^^^^^^^^
+
+Currently, there is no unicon iol plugin, so a dIOL may be reloaded using the
+following example::
+
+    red_dia = Dialog([[r'This will reload the active unit and force a switch of activity \[confirm\]', 'sendline()', None, True, True]])
+
+    device.reload(reload_command='redundancy switch-activity force', dialog=red_dia)
+
+
+
+Decoupled launch
+----------------
+
+Launch IOL / dIOL Topology
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Launch a single topology consisting of an interconnected IOL and dIOL router.
+
+::
+
+    localbringup -logical_testbed_file yaml/iol_tb.yaml -clean_file yaml/iol_bringup.yaml -tb_yaml_output_file_name /tmp/act_tb.yaml
+
+
+Launch IOL / Routem Topology
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Launch a single topology consisting of a pair of interconnected IOL devices
+also connected to a Routem device.
+
+::
+
+    localbringup -logical_testbed_file yaml/iol_routem_tb.yaml -clean_file yaml/iol_routem_bringup.yaml -tb_yaml_output_file_name /tmp/act_tb.yaml
+
+easypy launch
+-------------
+
+Launch IOL / dIOL Topology
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Launch a single topology consisting of an interconnected IOL and dIOL router.
+
+::
+
+    easypy jobs/connect_test_job.py -logical_testbed_file yaml/iol_tb.yaml -clean_file yaml/iol_bringup.yaml -clean_scope=task
+
+Launch IOL / Routem Topology
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Launch a single topology consisting of a pair of interconnected IOL devices
+also connected to a Routem device.
+
+::
+
+    easypy jobs/connect_test_job.py -logical_testbed_file yaml/iol_routem_tb.yaml -clean_file yaml/iol_routem_bringup.yaml -clean_scope=task
+

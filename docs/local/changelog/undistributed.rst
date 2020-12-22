@@ -1,0 +1,1 @@
+- now auto generates IOL license for server in use

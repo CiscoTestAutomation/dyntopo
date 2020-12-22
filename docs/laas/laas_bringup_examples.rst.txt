@@ -1,0 +1,454 @@
+
+.. note::
+
+        This document may be found in the `examples/dyntopo_laas` directory
+        of a pyATS environment.  All examples assume this is the
+        current working directory.
+
+        For better viewing/reading of this document, use restview_.
+
+        .. _restview: https://pypi.python.org/pypi/restview
+
+        For example::
+
+            pip install restview
+            restview -l 0:8080 README.rst
+
+        And then browse to http://your_machine:8080
+
+
+Please refer to the bringup `online documentation`_.
+
+.. _online documentation: http://wwwin-pyats.cisco.com/cisco-shared/html/dyntopo/docs/index.html
+
+
+Examples of Dynamic Topology Bringup on a LaaS Backend
+======================================================
+
+Here are examples of various workflows for bringing up a
+dynamic topology under pyATS and running tests against it:
+
+1. `Decoupled launch`_
+
+2. `Standalone launch`_
+
+3. `easypy launch`_
+
+
+
+When running bringup under easypy, the VIRL request file and the
+fully populated testbed YAML file are written to runinfo.
+
+
+Decoupled launch
+----------------
+Here are examples of a DT workflow showing how a testbed may be brought up
+with testbed and clean YAML files.  A script may then be run against that
+testbed repeatedly, while the testbed stays up.
+Finally, the user manually tears down the topology.
+
+
+In the first window, execute one of the following commands:
+
+Launch IOS Topology
+^^^^^^^^^^^^^^^^^^^
+Launch a topology consisting of IOS routers.
+
+This example requires you to provide a VmCloud server that is connected
+to the vmcloud-dev hardware lab domain.
+
+.. note::
+
+    The command ``laasbringup`` is equivalent to the command
+    ``kleenex -orchestrator=dyntopo.laas.BringUpWorker``.
+
+::
+
+    laasbringup -logical_testbed_file yaml/ios_connect_test_config.yaml -clean_file yaml/ios_connect_bringup_config.yaml -no_mail -tb_yaml_output_file_name /tmp/tb3.yaml -tb_virl_request_output_file_name=/tmp/virl3.out -no_remote_copy
+
+
+Make a manual connection to the IOS Topology
+""""""""""""""""""""""""""""""""""""""""""""
+In the second window:
+
+.. code-block:: python
+
+    python
+    from ats.topology import loader
+    t = loader.load('/tmp/tb3.yaml')
+    d = t.devices['r1']
+    d.connect()
+    d.execute("show interface")
+    from ats import tcl
+    tcl.eval('package require cAAs')
+    tcl.q.abstract(device=d.handle, exec="show interface FastEthernet0/0")
+    d.disconnect()
+    exit()
+
+
+In the first window, hit <Ctrl><C> to take down the previous testbed.
+
+
+Launch IOSv (vPagent) / NXOSv Topology
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Launch a topology consisting of a nxosv connected to a vPagent device.
+
+::
+    laasbringup -logical_testbed_file yaml/iosv_pagent_nxosv_connect_test_config.yaml -clean_file yaml/iosv_pagent_nxosv_connect_bringup_config.yaml -no_mail -tb_yaml_output_file_name /tmp/tb3.yaml -tb_virl_request_output_file_name=/tmp/virl3.out -no_remote_copy
+
+
+
+
+Launch IOSv Topology With External Links
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+It is possible to connect virtual devices with interfaces on the
+VmCloud server.  This allows interaction with virtual devices
+from other servers on the network.
+
+Launch a topology consisting of two interconnected iosv devices,
+with one link r1r2_1 connected to the default external interface eth1, and
+another link r1r2_2 connected to another external interface eth3.
+
+
+::
+    laasbringup -logical_testbed_file=yaml/iosv_ext_tb.yaml -clean_file=yaml/iosv_ext_clean.yaml -no_mail -tb_yaml_output_file_name /tmp/tb3.yaml -tb_virl_request_output_file_name=/tmp/virl3.out  -bringup_log_level=debug -no_remote_copy
+
+
+Launch NXOSv Topology With External Links
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+It is possible to connect virtual devices with interfaces on the
+VmCloud server.  This allows interaction with virtual devices
+from other servers on the network.
+
+Launch a topology consisting of two interconnected nxosv devices,
+with the management interface of all devices connected to the
+default external interface eth1.  Also, link r1r2_1 is connected to the
+default external interface eth1, and another link r1r2_2 is connected
+to another external interface eth3.
+
+::
+    laasbringup -logical_testbed_file=yaml/nxosv_ext_tb.yaml -clean_file=yaml/nxosv_ext_clean.yaml -no_mail -tb_yaml_output_file_name /tmp/tb3.yaml -tb_virl_request_output_file_name=/tmp/virl3.out  -bringup_log_level=debug -no_remote_copy
+
+
+Launch IOSXRv9k Topology With External Links
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+It is possible to connect virtual devices with interfaces on the
+VmCloud server.  This allows interaction with virtual devices
+from other servers on the network.
+
+Launch a topology consisting of two interconnected iosxrv9k (Sunstone)
+devices, with the management interface of all devices connected to the
+default external interface eth1.  Also, link r1r2_1 is connected to the
+default external interface eth1, and another link r1r2_2 is connected
+to another external interface eth3.
+
+::
+    laasbringup -logical_testbed_file=yaml/iosxrv9k_ext_tb.yaml -clean_file=yaml/iosxrv9k_ext_clean.yaml -no_mail -tb_yaml_output_file_name /tmp/tb3.yaml -tb_virl_request_output_file_name=/tmp/virl3.out  -bringup_log_level=debug
+
+
+
+Launch Xrvr9k (Sunstone) Topology
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Launch a topology consisting of two interconnected Sunstone devices.
+
+::
+    laasbringup -logical_testbed_file yaml/iosxrv9k_connect_test_config.yaml -clean_file yaml/iosxrv9k_connect_bringup_config.yaml -no_mail -tb_yaml_output_file_name /tmp/tb3.yaml -tb_virl_request_output_file_name=/tmp/virl3.out -vmcloud_server=ott-ss-001 -bringup_log_level=debug
+
+
+
+Launch Simplex/HA Xrvr Topology with Mgt+Data External Links
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Launch a topology consisting of two interconnected XRVR devices, one
+simplex and one HA.  External links are requested for management and
+data interfaces.
+
+::
+
+    laasbringup -logical_testbed_file=yaml/xrvr_ha_ext_test_config.yaml -clean_file=yaml/xrvr_ha_ext_bringup_config.yaml -no_mail -tb_yaml_output_file_name /tmp/tb3.yaml -tb_virl_request_output_file_name=/tmp/virl3.out -no_remote_copy -bringup_log_level=debug
+
+
+
+Launch Simplex/Multinode Xrvr Topology with Data External Link
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Launch a topology consisting of two interconnected XRVR devices, one
+simplex and one multinode.  External link is requested for data interfaces.
+
+::
+
+    laasbringup -logical_testbed_file=yaml/xrvr_mn_test_config.yaml -clean_file=yaml/xrvr_mn_bringup_config.yaml -no_mail -tb_yaml_output_file_name /tmp/tb3.yaml -tb_virl_request_output_file_name=/tmp/virl3.out -no_remote_copy -bringup_log_level=debug
+
+
+
+Launch Simplex/Multinode Xrvr Topology
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Launch a topology consisting of two interconnected XRVR devices, one
+simplex and one multinode.
+
+::
+
+    laasbringup -logical_testbed_file=yaml/xrvr_test_config.yaml -clean_file=yaml/xrvr_bringup_config.yaml -no_mail -tb_yaml_output_file_name /tmp/tb3.yaml -tb_virl_request_output_file_name=/tmp/virl3.out -no_remote_copy -bringup_log_level=debug
+
+
+Launch CSR1000v (Ultra)
+^^^^^^^^^^^^^^^^^^^^^^^
+Launch a topology consisting of two interconnected CSR1000v devices.
+
+::
+    laasbringup -logical_testbed_file yaml/csr1000v_connect_test_config.yaml -clean_file yaml/csr1000v_connect_bringup_config.yaml -no_mail -tb_yaml_output_file_name /tmp/tb3.yaml -tb_virl_request_output_file_name=/tmp/virl3.out -no_remote_copy
+
+
+
+
+
+Run the test script
+^^^^^^^^^^^^^^^^^^^
+In the second window run the same test script for all launch variants::
+
+    easypy  jobs/connect_test_job.py -loglevel DEBUG -testbed_file /tmp/tb3.yaml
+
+
+Standalone launch
+-----------------
+Here are examples of a DT workflow showing how a testbed may be brought up
+with testbed and clean YAML files, a script run against that testbed
+and then the testbed brought down, using only a single command.
+
+
+Launch IOS Topology
+^^^^^^^^^^^^^^^^^^^
+Launch a topology consisting of IOS routers.
+
+This example requires you to provide a VmCloud server that is connected
+to the vmcloud-dev hardware lab domain.
+
+::
+    python standalone_tests/standalone_connect_test.py -logical_testbed_file yaml/ios_connect_test_config.yaml -clean_file yaml/ios_connect_bringup_config.yaml  -tb_yaml_output_file_name /tmp/tb4.yaml -uut1_name 'r1' -uut2_name 'r2'
+
+
+Launch IOSv (vPagent) / NXOSv Topology
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Launch a topology consisting of a nxosv connected to a vPagent device.
+
+::
+    python standalone_tests/standalone_connect_test.py -logical_testbed_file yaml/iosv_pagent_nxosv_connect_test_config.yaml -clean_file yaml/iosv_pagent_nxosv_connect_bringup_config.yaml  -tb_yaml_output_file_name /tmp/tb4.yaml -uut1_name 'r1' -uut2_name 'r2' -no_remote_copy
+
+
+
+easypy launch
+-------------
+
+All-in-one command that launches a dynamic topology, runs a test and
+then tears down the topology.  All logs are placed in the runinfo directory,
+which is then archived and uploaded to TRADe.  The user receives an email
+containing the results of the run.
+
+
+
+Bring up IOS Topology
+^^^^^^^^^^^^^^^^^^^^^
+
+Launch a job-scope topology consisting of two IOS routers.
+
+This example requires you to provide a VmCloud server that is connected
+to the vmcloud-dev hardware lab domain.
+
+::
+
+    easypy jobs/connect_test_job.py  -logical_testbed_file yaml/ios_connect_test_config.yaml -clean_file yaml/ios_connect_bringup_config.yaml -clean_scope=job
+
+
+Launch a task-scope topology consisting of two IOS routers.
+
+::
+
+    easypy jobs/connect_test_job.py  -logical_testbed_file yaml/ios_connect_test_config.yaml -clean_file yaml/ios_connect_bringup_config.yaml -clean_scope=task
+
+
+
+Launch two parallel topologies, each consisting of a single IOS router.
+
+::
+    easypy jobs/connect_test_job_multiple_async_topo.py -logical_testbed_file yaml/ios_connect_test_config_single.yaml -clean_file yaml/ios_connect_bringup_config.yaml -clean_scope=task
+
+
+Bring up IOSv Topology
+^^^^^^^^^^^^^^^^^^^^^^
+
+Launch two parallel topologies, each consisting of a pair of IOSv routers.
+
+::
+    easypy jobs/connect_test_job_multiple_async_topo_double.py -logical_testbed_file yaml/iosv_connect_test_config.yaml -clean_file yaml/iosv_connect_bringup_config.yaml -clean_scope=task -no_remote_copy
+
+
+Bring up NXOSv Topology With External Links
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Launch two parallel topologies, each consisting of a pair of NXOSv routers
+requesting connections to external links.
+
+::
+    easypy jobs/connect_test_job_multiple_async_topo_double.py -logical_testbed_file yaml/nxosv_ext_tb.yaml -clean_file yaml/nxosv_ext_clean.yaml -clean_scope=task -no_remote_copy
+
+
+Bring up NXOSv Topology
+^^^^^^^^^^^^^^^^^^^^^^
+
+Launch two parallel topologies, each consisting of a pair of nxosv routers.
+
+::
+    easypy jobs/connect_test_job_multiple_async_topo_double.py -logical_testbed_file yaml/nxosv_connect_test_config.yaml -clean_file yaml/nxosv_connect_bringup_config.yaml -clean_scope=task -no_remote_copy
+
+
+Bring up IOSv (vPagent) / NXOSv Topology
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Launch two parallel topologies, each consisting of a nxosv connected to a
+vPagent device.
+
+::
+    easypy jobs/connect_test_job_multiple_async_topo_double.py -logical_testbed_file yaml/iosv_pagent_nxosv_connect_test_config.yaml -clean_file yaml/iosv_pagent_nxosv_connect_bringup_config.yaml -clean_scope=task -no_remote_copy
+
+
+
+Bring up Xrvr9k (Sunstone) Topology
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Launch two parallel topologies, each consisting of topology of two
+interconnected Sunstone devices, on a bare metal LaaS server.  The image
+is copied from the execution server to the LaaS server.
+
+::
+    easypy jobs/connect_test_job_multiple_async_topo_double.py -logical_testbed_file yaml/iosxrv9k_connect_test_config.yaml -clean_file yaml/iosxrv9k_connect_bringup_config.yaml -clean_scope=task
+
+
+Bring up IOSXRv9k (Sunstone) Topology With External Links
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Launch two parallel topologies, each consisting of topology of two
+interconnected Sunstone devices, on a bare metal LaaS server.  The image
+is copied from the execution server to the LaaS server.
+
+::
+    easypy jobs/connect_test_job_multiple_async_topo_double.py -logical_testbed_file yaml/iosxrv9k_ext_tb.yaml -clean_file yaml/iosxrv9k_ext_clean.yaml -clean_scope=task
+
+
+
+Bring up NXOSv Topology With External Links
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Launch two parallel topologies, each consisting of a pair of NXOSv routers
+requesting connections to external links.
+
+::
+    easypy jobs/connect_test_job_multiple_async_topo_double.py -logical_testbed_file yaml/nxosv_ext_tb.yaml -clean_file yaml/nxosv_ext_clean.yaml -clean_scope=task -no_remote_copy
+
+
+
+Bring up Xrvr9k (Sunstone) Topology (Cleanfile indicates no remote image copy)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Launch two parallel topologies, each consisting of topology of two
+interconnected Sunstone devices, on a LaaS VM.  The image
+is not copied from the execution server to the LaaS server.
+
+::
+    easypy jobs/connect_test_job_multiple_async_topo_double.py -logical_testbed_file yaml/iosxrv9k_connect_test_config.yaml -clean_file yaml/iosxrv9k_connect_no_remote_copy_bringup_config.yaml -clean_scope=task
+
+
+
+Bring up IOSXRv Topology
+^^^^^^^^^^^^^^^^^^^^^^^^
+Launch two parallel topologies, each consisting of a pair of IOSXRv (XRVR)
+routers, one simplex and the other multinode.
+
+::
+    easypy jobs/connect_test_job_multiple_async_topo_double.py -logical_testbed_file yaml/xrvr_test_config.yaml -clean_file yaml/xrvr_bringup_config.yaml -clean_scope=task
+
+
+
+Bring up CSR1000V Topology
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+Launch two parallel topologies, each consisting of a pair of CSR1000V (Ultra)
+routers.
+
+::
+    easypy jobs/connect_test_job_multiple_async_topo_double.py -logical_testbed_file yaml/csr1000v_connect_test_config.yaml -clean_file yaml/csr1000v_connect_bringup_config.yaml -clean_scope=task
+
+
+
+Bring up HA IOSXRv Topology
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Launch two parallel topologies, each consisting of a pair of IOSXRv (XRVR)
+routers, one simplex and the other HA.
+
+::
+    easypy jobs/connect_test_job_multiple_async_topo_double.py -logical_testbed_file yaml/xrvr_ha_test_config.yaml -clean_file yaml/xrvr_ha_bringup_config.yaml -clean_scope=task
+
+
+
+Bring up Hybrid IOSv / IOS Topology
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Launch a single topology consisting of an iosv router connected to a
+physical ios router.
+
+This example requires you to provide a VmCloud server that is connected
+to the vmcloud-dev hardware lab domain.
+
+::
+    easypy jobs/connect_test_job.py -logical_testbed_file yaml/iosv_ios_hybrid_connect_test_config.yaml -clean_file yaml/iosv_ios_hybrid_connect_bringup_config.yaml -clean_scope=task -no_remote_copy
+
+
+Bring up Hybrid IOSv / IOS Topology (Genie Ping Test)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Launch a single topology consisting of an iosv router connected to a
+physical ios router and have each device ping the other.
+
+This example requires you to provide a VmCloud server that is connected
+to the vmcloud-dev hardware lab domain.
+
+.. note::
+    This example requires the following commands to be executed:
+
+    ::
+      pip install --upgrade genie
+
+::
+    easypy jobs/genie_ping_job.py -logical_testbed_file yaml/iosv_ios_hybrid_ping_test_config.yaml -clean_file yaml/iosv_ios_hybrid_ping_bringup_config.yaml  -clean_scope=task -no_remote_copy --uut_alias uut --helper_alias helper
+
+
+Bring up IOSv Topology (Genie Ping Test)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Launch a topology consisting of a pair of IOSv routers and have each device
+ping the other.
+
+.. note::
+    This example requires the following commands to be executed:
+
+    ::
+      pip install --upgrade genie
+
+
+::
+    easypy jobs/genie_ping_job.py -logical_testbed_file yaml/iosv_connect_test_config.yaml -clean_file yaml/iosv_connect_bringup_config.yaml -clean_scope=task -no_remote_copy --uut_alias uut --helper_alias helper
+
+
+Bring up CSR1000V Topology (Genie Ping Test)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Launch a topology consisting of a pair of CSR1000v routers
+and have each device ping the other.
+    ::
+      pip install --upgrade genie
+
+ ::
+    easypy jobs/genie_ping_job.py -logical_testbed_file yaml/csr1000v_connect_test_config.yaml -clean_file yaml/csr1000v_connect_bringup_config.yaml -clean_scope=task -no_remote_copy --uut_alias uut --helper_alias helper
+
+
+Bring up multiple n9000v Topologies (Genie Ping Test)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Launch multiple topologies consisting of pairs of n9000v routers
+and have each device in a pair ping the other.  Each topology is brought up
+on a different LaaS server.
+
+::
+    easypy jobs/genie_ping_multiple_svr_job.py -logical_testbed_file yaml/n9000v_connect_test_config.yaml -clean_file yaml/n9000v_connect_bringup_config.yaml -clean_scope=task  --uut_alias uut --helper_alias helper

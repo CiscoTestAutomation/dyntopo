@@ -1,0 +1,1054 @@
+
+.. note::
+
+        This document may be found in the `examples/dyntopo_xrut` directory
+        of a pyATS environment.  All examples assume this is the
+        current working directory.
+
+        For better viewing/reading of this document, use restview_.
+
+        .. _restview: https://pypi.python.org/pypi/restview
+
+        For example::
+
+            pip install restview
+            restview -l 0:8080 README.rst
+
+        And then browse to http://your_machine:8080
+
+
+Please refer to the bringup `online documentation`_.
+
+.. _online documentation: http://wwwin-pyats.cisco.com/documentation/html/bringup/index.html
+
+
+Examples of Dynamic Topology Bringup
+====================================
+
+Here are examples of various workflows for bringing up a
+dynamic topology under pyAts and running tests against it:
+
+1. `Decoupled DE-style launch`_
+
+2. `Standalone DE-style launch`_
+
+3. `Decoupled DT-style launch`_
+
+4. `Decoupled DT-style integrated launch and clean`_
+
+5. `Standalone DT-style launch`_
+
+6. `easypy DT-style launch`_
+
+6. `easypy DT-style integrated launch and clean`_
+
+In all decoupled and standalone launches, an `./xrut/logs` directory is
+created under the current working directory.
+If a sim_dir is specified, then the logs go under `<sim_dir>/xrut/logs`.
+If an XR workspace is specified via the "-workspace" command, the logs are
+placed under `<ws>/tgt-linux/hosts/xrut_logs`.
+
+When running bringup under easypy, XR-UT bringup logs are placed into
+task-specific subdirectories under the runinfo directory.
+The fully populated testbed YAML file is written to runinfo.
+The sim_dir is extended with a unique suffix and a new directory
+created under the original sim_dir.  This new directory is destroyed
+at the end of the run.
+
+Any topology brought up on a LaaS server is given a unique name containing
+the script name.
+
+
+If you want to launch EnXR you'll need to have an ADS machine, log into it,
+pull a workspace and build EnXR.  For example::
+
+    mkdir -p /nobackup/$USER/r60y
+    chdir -p /nobackup/$USER/r60y
+    acme nw -lineup xr-dev.lu -plat enxr
+
+If you want to launch Moonshine, you'll need to have a suitable host machine
+available, and set the 'moonshine_host' option. See
+https://confluence-eng-sjc1.cisco.com/conf/display/ENXR/Moonshine for more
+details.
+
+Also, in order to interact with the dynamic topologies you will need to
+source your ATS tree (since pyATS currently uses a Csccon/TCL implementation
+under the abstract connection model).
+
+
+Decoupled DE-style launch
+-------------------------
+
+Here are examples of a DE (plug-and-play) workflow showing how a dynamic
+topology may be started and kept up for an extended period of time.
+A separately launched test script connects to the existing testbed.
+Finally, the user manually tears down the topology.
+This workflow lends itself well to rapid iteration cycles without having
+to wait for the dynamic testbed to be repeatedly set up and torn down.
+
+
+::
+
+    mkdir -p /tmp/$USER/xrut_sim_dir
+
+Launch IOS Topology
+^^^^^^^^^^^^^^^^^^^
+
+In the first window::
+
+    xrutbringup -cli_topology='{ "n1": ( "ios1", "ios-pagent-1" )}' -default_type=ios_dynamips -sim_dir=/tmp/$USER/xrut_sim_dir -no_mail -tb_yaml_output_file_name=/tmp/tb1.yaml
+
+In the second window::
+
+    python standalone_tests/standalone_ping_test.py -connect_to_existing_topology -testbed_file=/tmp/tb1.yaml -uut1_name='ios1' -uut2_name='ios-pagent-1' -uut1_if_name="FastEthernet0/0" -uut2_if_name="FastEthernet0/0"
+
+In the first window, hit <Ctrl><C> to take down the previous testbed.
+
+
+Launch IOS/IOL Topology
+^^^^^^^^^^^^^^^^^^^^^^^
+
+If this is the first time you are running IOL on the execution server,
+the IOL launch command will fail with the following error::
+
+    XR-UT: BootException: BOOTEXCEPTION: Failed to get IOL license for pyats-lnx-3, key xxxxxxxx
+
+Obtain a license key at the following
+`address <https://scripts.cisco.com/app/IOLLicenseGenerator>`_
+(using xxxxxxxx from the error message as your "Key" and the name of the
+server you want to run IOL on as the "Hostname":
+
+Take the line of text emitted by the web tool and add it to your ``~/.iourc``
+file.
+
+.. note::
+
+    The command ``xrutbringup`` is equivalent to the command
+    ``kleenex -orchestrator=dyntopo.xrut.BringUpWorker``.
+
+
+In the first window::
+
+    xrutbringup -cli_topology='{ "n1": ( "iol1", "ios-pagent-1" )}' -default_type=ios_dynamips -sim_dir=/tmp/$USER/xrut_sim_dir -no_mail -tb_yaml_output_file_name=/tmp/tb1.yaml -iol_flags="-console_timeout 1000" -iol_flags="-m 512"
+
+In the second window::
+
+    python standalone_tests/standalone_ping_test.py -connect_to_existing_topology -testbed_file=/tmp/tb1.yaml -uut1_name='iol1' -uut2_name='ios-pagent-1' -uut1_if_name="Ethernet0/0" -uut2_if_name="FastEthernet0/0"
+
+Make a manual connection to the IOS/IOL Topology
+""""""""""""""""""""""""""""""""""""""""""""""""
+
+In the second window:
+
+.. code-block:: python
+
+    python
+    from ats.topology import loader
+    t = loader.load('/tmp/tb1.yaml')
+    d = t.devices['ios-pagent-1']
+    d.connect()
+    d.execute("show interface")
+    d.destroy_connection()
+    d.connect(via='aux')
+    d.execute("show interface")
+    from ats import tcl
+    tcl.eval('package require cAAs')
+    tcl.q.abstract(device=d.handle, exec="show interface FastEthernet0/0")
+    d.disconnect()
+    exit()
+
+In the first window, hit <Ctrl><C> to take down the previous testbed.
+
+Launch IOS/EnXR Topology
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+This section describes bringing up a topology consisting of a single
+simplex EnXR and a Dynamips IOS device, and testing that they can ping
+each other.
+
+In the first window::
+
+    xrutbringup -cli_topology='{ "n1": ( "ios1", "enxr-1" )}' -default_type=enxr  -no_mail -tb_yaml_output_file_name=/tmp/tb1.yaml -workspace=/nobackup/$USER/r60y
+
+In the second window::
+
+    python standalone_tests/standalone_ping_test.py -connect_to_existing_topology -testbed_file=/tmp/tb1.yaml -uut1_name='ios1' -uut2_name='enxr-1' -uut1_if_name="FastEthernet0/0" -uut2_if_name="GigabitEthernet0/0/0/0"
+
+
+In the first window, hit <Ctrl><C> to take down the previous testbed.
+
+Launch IOS/EnXR-HA-multinode Topology
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+This section describes bringing up a topology consisting of a single
+HA multinode EnXR (consisting of a simulated active and standby RP
+and a simulated line card) and a Dynamips IOS device,
+and testing that they can ping each other.
+
+In the first window::
+
+    xrutbringup -cli_topology='{ "n1": ( "ios1", "enxr-1" )}' -router_requirements='{ "enxr-1": { "standby":True}}' -default_type=enxr  -no_mail -tb_yaml_output_file_name=/tmp/tb1.yaml -workspace=/nobackup/$USER/r60y
+
+In the second window::
+
+    python standalone_tests/standalone_ping_test.py -connect_to_existing_topology -testbed_file=/tmp/tb1.yaml -uut1_name='ios1' -uut2_name='enxr-1' -uut1_if_name="FastEthernet0/0" -uut2_if_name="GigabitEthernet0/2/0/0"
+
+Make a manual connection to the IOS/EnXR-HA Topology
+""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+Here's some examples of connection subcommands that you can run on
+a HA capable EnXR node.
+
+In the second window:
+
+.. code-block:: python
+
+    python
+    from ats.topology import loader
+    t = loader.load('/tmp/tb1.yaml')
+    d = t.devices['enxr-1']
+    d.connect()
+    d.execute("show interface")
+    d.execute("show interface", "stdby")
+    from ats import tcl
+    tcl.eval('package require cAAs')
+    tcl.q.abstract(device=d.handle, exec="show interface GigabitEthernet0/2/0/0")
+    d.config('interface GigabitEthernet0/2/0/0', 'no shut')
+    d.adminexec("show version")
+    d.adminconfig('describe do show version')
+    d.is_ha()
+    d.get_ha_state('active')
+    d.get_ha_state('standby')
+    d.switchover()
+    d.get_ha_state('active')
+    d.get_ha_state('standby')
+    d.execute("show interface")
+    d.execute("show interface", "stdby")
+    d.disconnect()
+    exit()
+
+
+In the first window, hit <Ctrl><C> to take down the previous testbed.
+
+Launch IOS/EnXR-multinode Topology
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+This section describes bringing up a topology consisting of a single
+simplex multinode EnXR (with a simulated RP and a simulated line card)
+and a Dynamips IOS device, and testing that they can ping each other.
+
+In the first window::
+
+    xrutbringup -cli_topology='{ "n1": ( "ios1", "enxr-1" )}' -router_requirements='{ "enxr-1": { "multinode":True}}' -default_type=enxr  -no_mail -tb_yaml_output_file_name=/tmp/tb1.yaml -workspace=/nobackup/$USER/r60y
+
+In the second window::
+
+    python standalone_tests/standalone_ping_test.py -connect_to_existing_topology -testbed_file=/tmp/tb1.yaml -uut1_name='ios1' -uut2_name='enxr-1' -uut1_if_name="FastEthernet0/0" -uut2_if_name="GigabitEthernet0/2/0/0"
+
+Make a manual connection to the IOS/EnXR-multinode Topology
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+Here's some examples of connection subcommands that you can run on
+an EnXR node.
+
+In the second window:
+
+.. code-block:: python
+
+    python
+    from ats.topology import loader
+    t = loader.load('/tmp/tb1.yaml')
+    d = t.devices['enxr-1']
+    d.connect()
+    d.execute("show interface")
+    from ats import tcl
+    tcl.eval('package require cAAs')
+    tcl.q.abstract(device=d.handle, exec="show interface GigabitEthernet0/2/0/0")
+    d.config('interface GigabitEthernet0/2/0/0', 'no shut')
+    d.adminexec("show version")
+    d.is_ha()
+    d.adminconfig('describe do show version')
+    d.disconnect()
+    exit()
+
+
+In the first window, hit <Ctrl><C> to take down the previous testbed.
+
+Launch IOS/Moonshine Topology
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+This section describes bringing up a topology consisting of a single
+simplex Moonshine and a Dynamips IOS device, and testing that they can ping
+each other.
+
+You'll need a Moonshine host machine ($MOONSHINE_HOST) available, as well as
+a Moonshine image ($MOONSHINE_IMAGE).
+
+In the first window::
+
+    xrutbringup -cli_topology='{ "n1": ( "ios1", "moonshine-1" )}' -default_type=moonshine  -no_mail -tb_yaml_output_file_name=/tmp/tb1.yaml -moonshine_image=$MOONSHINE_IMAGE -moonshine_host=$MOONSHINE_HOST
+
+In the second window::
+
+    python standalone_tests/standalone_ping_test.py -connect_to_existing_topology -testbed_file=/tmp/tb1.yaml -uut1_name='ios1' -uut2_name='enxr-1' -uut1_if_name="FastEthernet0/0" -uut2_if_name="GigabitEthernet0/0/0/0"
+
+
+In the first window, hit <Ctrl><C> to take down the previous testbed.
+
+Launch IOS/Moonshine-multinode Topology
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+This section describes bringing up a topology consisting of a single
+multinode Moonshine (consisting of a simulated RP and a simulated line card)
+and a Dynamips IOS device, and testing that they can ping each other.
+
+You'll need a Moonshine host machine ($MOONSHINE_HOST) available, as well as
+a Moonshine image ($MOONSHINE_IMAGE).
+
+In the first window::
+
+    xrutbringup -cli_topology='{ "n1": ( "ios1", "moonshine-1" )}' -router_requirements='{ "moonshine-1": { "multinode":True}}' -default_type=moonshine -no_mail -tb_yaml_output_file_name=/tmp/tb1.yaml -moonshine_image=$MOONSHINE_IMAGE -moonshine_host=$MOONSHINE_HOST
+
+In the second window::
+
+    python standalone_tests/standalone_ping_test.py -connect_to_existing_topology -testbed_file=/tmp/tb1.yaml -uut1_name='ios1' -uut2_name='moonshine-1' -uut1_if_name="FastEthernet0/0" -uut2_if_name="GigabitEthernet0/2/0/0"
+
+
+In the first window, hit <Ctrl><C> to take down the previous testbed.
+
+Launch IOS/Moonshine-HA-multinode Topology
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+This section describes bringing up a topology consisting of a single
+HA multinode Moonshine (consisting of a simulated active and standby RP
+and a simulated line card) and a Dynamips IOS device,
+and testing that they can ping each other.
+
+You'll need a Moonshine host machine ($MOONSHINE_HOST) available, as well as
+a Moonshine image ($MOONSHINE_IMAGE).
+
+In the first window::
+
+    xrutbringup -cli_topology='{ "n1": ( "ios1", "moonshine-1" )}' -router_requirements='{ "moonshine-1": { "standby":True}}' -default_type=moonshine -no_mail -tb_yaml_output_file_name=/tmp/tb1.yaml -moonshine_image=$MOONSHINE_IMAGE -moonshine_host=$MOONSHINE_HOST
+
+In the second window::
+
+    python standalone_tests/standalone_ping_test.py -connect_to_existing_topology -testbed_file=/tmp/tb1.yaml -uut1_name='ios1' -uut2_name='moonshine-1' -uut1_if_name="FastEthernet0/0" -uut2_if_name="GigabitEthernet0/2/0/0"
+
+
+In the first window, hit <Ctrl><C> to take down the previous testbed.
+
+Make a manual connection to the IOS/Moonshine-HA Topology
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+Here's some examples of connection subcommands that you can run on
+a HA capable Moonshine node.
+
+In the second window:
+
+.. code-block:: python
+
+    python
+    from ats.topology import loader
+    t = loader.load('/tmp/tb1.yaml')
+    d = t.devices['moonshine-1']
+    d.connect()
+    d.execute("show interface")
+    d.execute("show interface", "stdby")
+    from ats import tcl
+    tcl.eval('package require cAAs')
+    tcl.q.abstract(device=d.handle, exec="show interface GigabitEthernet0/2/0/0")
+    d.config('interface GigabitEthernet0/2/0/0', 'no shut')
+    d.is_ha()
+    d.get_ha_state('active')
+    d.get_ha_state('standby')
+    d.switchover()
+    d.get_ha_state('active')
+    d.get_ha_state('standby')
+    d.execute("show interface")
+    d.execute("show interface", "stdby")
+    d.disconnect()
+    exit()
+
+
+In the first window, hit <Ctrl><C> to take down the previous testbed.
+
+Launch EnXR/XRVR Topology
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+In the first window, bring up EnXR and locally orchestrated simplex XRVR::
+
+    xrutbringup -cli_topology='{ "n1": ( "enxr-1", "xrvr-1" )}' -default_type=iosxrv  -no_mail -tb_yaml_output_file_name=/tmp/tb1.yaml -workspace=/nobackup/$USER/r60y -xrvr_image='/auto/xrut/images/iosxrv.vmdk.old'
+
+In the second window::
+
+    python standalone_tests/standalone_ping_test.py -connect_to_existing_topology  -testbed_file=/tmp/tb1.yaml -uut1_name='enxr-1' -uut2_name='xrvr-1' -uut1_if_name="GigabitEthernet0/0/0/0" -uut2_if_name="GigabitEthernet0/0/0/0"
+
+In the first window, hit <Ctrl><C> to take down the previous testbed.
+
+
+Launch IOSv/XRVR-multinode Topology on LaaS Server
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+In the first window, bring up a IOSv and simplex XRVR with virtual line card
+on a LaaS backend::
+
+    xrutbringup -cli_topology='{ "n1": ( "ios-1", "xrvr-1" )}' -router_requirements='{ "xrvr-1": { "multinode":True}}' -default_type=iosxrv -bringup_no_mail -tb_yaml_output_file_name=/tmp/tb1.yaml -sim_dir=/nobackup/$USER/xrut_sim_dir -vmcloud_server=nostg-ott-vm-7 -bringup_log_level=debug -bringup_xrut_log_level=debug -xrvr_rp_image=/auto/xrut/images/iosxrv-rp.ova -xrvr_lc_image=/auto/xrut/images/iosxrv-lc.ova
+
+
+In the second window::
+
+    python standalone_tests/standalone_ping_test.py -connect_to_existing_topology  -testbed_file=/tmp/tb1.yaml -uut1_name='ios-1' -uut2_name='xrvr-1' -uut1_if_name="GigabitEthernet0/0" -uut2_if_name="GigabitEthernet0/2/0/0"
+
+In the first window, hit <Ctrl><C> to take down the previous testbed.
+
+
+Launch IOSv/XRVR-HA Topology on LaaS Server
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+In the first window, bring up a IOSv and dual-RP multinode XRVR with
+virtual line card on a LaaS backend::
+
+    xrutbringup -cli_topology='{ "n1": ( "ios-1", "xrvr-1" )}' -router_requirements='{ "xrvr-1": { "standby":True}}' -default_type=iosxrv -bringup_no_mail -tb_yaml_output_file_name=/tmp/tb1.yaml -sim_dir=/nobackup/$USER/xrut_sim_dir -vmcloud_server=nostg-ott-vm-7 -bringup_log_level=debug -bringup_xrut_log_level=debug -xrvr_rp_image=/auto/xrut/images/iosxrv-rp.ova -xrvr_lc_image=/auto/xrut/images/iosxrv-lc.ova
+
+
+In the second window::
+
+    python standalone_tests/standalone_ping_test.py -connect_to_existing_topology  -testbed_file=/tmp/tb1.yaml -uut1_name='ios-1' -uut2_name='xrvr-1' -uut1_if_name="GigabitEthernet0/0" -uut2_if_name="GigabitEthernet0/2/0/0"
+
+In the first window, hit <Ctrl><C> to take down the previous testbed.
+
+
+Launch IOSv / NXOSv Topology on LaaS Server
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+In the first window, bring up NXOSv (Titanium) and IOSv on a LaaS backend::
+
+    xrutbringup -cli_topology='{ "n1": ( "ios1", "nxos1" )}' -default_type=iosv -no_mail -sim_dir=/tmp/$USER/xrut_sim_dir  -tb_yaml_output_file_name=/tmp/tb1.yaml -vmcloud_server=nostg-ott-vm-7 -nxos_image=/auto/xrut/images/nxosv-7.2.0.ZD.0.134.s0.ova
+
+In the second window::
+
+    python standalone_tests/standalone_ping_test.py -connect_to_existing_topology -testbed_file=/tmp/tb1.yaml -uut1_name='ios1' -uut2_name='nxos1' -uut1_if_name="GigabitEthernet0/0" -uut2_if_name="Ethernet2/1"
+
+
+Make a manual connection to the IOSv/NXOSv Topology
+"""""""""""""""""""""""""""""""""""""""""""""""""""
+
+Here's some examples of connection subcommands that you can run on
+a NXOSv (Titanium) node.
+
+In the second window:
+
+.. code-block:: python
+
+    python
+    from ats.topology import loader
+    t = loader.load('/tmp/tb1.yaml')
+    d = t.devices['nxos1']
+    d.connect()
+    d.execute("show interface")
+    from ats import tcl
+    tcl.eval('package require cAAs')
+    tcl.q.abstract(device=d.handle, exec="show interface Ethernet2/1")
+    d.disconnect()
+    exit()
+
+
+In the first window, hit <Ctrl><C> to take down the previous testbed.
+
+
+Launch IOSv / CSR1000v Topology on LaaS Server
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+In the first window, bring up a CSR1000v(Ultra) and IOSv on a LaaS backend::
+
+    xrutbringup -cli_topology='{ "n1": ( "ios1", "csr1" )}' -default_type=iosv -no_mail -sim_dir=/tmp/$USER/xrut_sim_dir  -tb_yaml_output_file_name=/tmp/tb1.yaml -vmcloud_server=nostg-ott-vm-7
+
+In the second window::
+
+    python standalone_tests/standalone_ping_test.py -connect_to_existing_topology -testbed_file=/tmp/tb1.yaml -uut1_name='ios1' -uut2_name='csr1' -uut1_if_name="GigabitEthernet0/0" -uut2_if_name="GigabitEthernet1"
+
+
+Launch Moonshine/Moonshine Topology on a UCS Server, run a test using unicon
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Usually, a logical testbed file (i.e. DT-style launch) will be used to
+specify unicon as the connection class. To use unicon in a DE-style launch,
+the test script will have to change the connection class to unicon, as in
+this example.
+
+You'll need a Moonshine host machine ($MOONSHINE_HOST) available, as well as
+a Moonshine image ($MOONSHINE_IMAGE),
+e.g. /auto/xrut/images/enxr-router-spirit-64.vm.
+See https://confluence-eng-sjc1.cisco.com/conf/display/ENXR/Moonshine for more
+details.
+
+Set the ``-xrut_base_dir`` option as well to use a non-default XRUT repo.
+
+The example script used below, standalone_ping_test_unicon.py, appears as
+part of the dyntopo examples set. You will need to change your working
+directory to examples/dyntopo_xrut from the top-level pyATS workspace.
+
+In the first window, bring up a Moonshine/Moonshine topology::
+
+    xrutbringup -cli_topology='{ "n1": ( "moonshine-1", "moonshine-2" )}' -default_type=moonshine -no_mail -tb_yaml_output_file_name=/tmp/tb1.yaml -moonshine_host=$MOONSHINE_HOST -moonshine_image=$MOONSHINE_IMAGE
+
+In the second window::
+
+    python standalone_tests/standalone_ping_test_unicon.py  -connect_to_existing_topology -testbed_file=/tmp/tb1.yaml -uut1_name='moonshine-1' -uut2_name='moonshine-2' -uut1_if_name="GigabitEthernet0/0/0/0" -uut2_if_name="GigabitEthernet0/0/0/0"
+
+
+
+Standalone DE-style launch
+--------------------------
+
+Here are examples of a DE (plug-and-play) workflow showing how a dynamic
+testbed may be brought up, a test run against it, and the testbed torn down,
+all with a single command.
+
+::
+
+    mkdir -p /tmp/$USER/xrut_sim_dir2
+
+Launch IOS/IOL Topology
+^^^^^^^^^^^^^^^^^^^^^^^
+
+Launch a topology consisting of IOL and IOS Dynamips routers.
+
+::
+
+    python standalone_tests/standalone_ping_test.py -cli_topology='{ "n1": ( "ios1",  "iol" )}'  -sim_dir=/tmp/$USER/xrut_sim_dir2 -default_type=iol  -tb_yaml_output_file_name=/tmp/tb2.yaml -uut1_name='ios1' -uut2_name='iol' -uut1_if_name="FastEthernet0/0" -uut2_if_name="Ethernet0/0" -orchestrator=dyntopo.xrut.BringUpWorker
+
+Launch IOS/EnXR Topology
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+Launch a topology consisting of IOS Dynamips and simplex EnXR routers.
+
+::
+
+    python standalone_tests/standalone_ping_test.py -cli_topology='{ "n1": ( "ios1",  "enxr-1" )}'  -workspace=/nobackup/$USER/r60y -default_type=ios_dynamips  -tb_yaml_output_file_name=/tmp/tb2.yaml -uut1_name='ios1' -uut2_name='enxr-1' -uut1_if_name="FastEthernet0/0" -uut2_if_name="FastEthernet0/0/0/0" -orchestrator=dyntopo.xrut.BringUpWorker
+
+Launch EnXR/XRVR Topology
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Launch a topology consisting of simplex EnXR and XRVR routers.
+
+::
+
+    python standalone_tests/standalone_ping_test.py -cli_topology='{ "n1": ( "enxr-1",  "xrvr-1" )}'   -workspace=/nobackup/$USER/r60y  -default_type=enxr  -tb_yaml_output_file_name=/tmp/tb2.yaml -uut1_name='enxr-1' -uut2_name='xrvr-1' -uut1_if_name="GigabitEthernet0/0/0/0" -uut2_if_name="GigabitEthernet0/0/0/0" -xrvr_image=/auto/xrut/images/iosxrv.vmdk.old -orchestrator=dyntopo.xrut.BringUpWorker
+
+
+Launch IOSv/NXOSv Topology on LaaS Server
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Launch a topology consisting of IOSv and NXOSv (Titanium) routers.
+
+::
+
+    python standalone_tests/standalone_ping_test.py -cli_topology='{ "n1": ( "ios-1",  "nxos-1" )}'   -sim_dir=/tmp/$USER/xrut_sim_dir2  -default_type=iosv  -tb_yaml_output_file_name=/tmp/tb2.yaml -uut1_name='ios-1' -uut2_name='nxos-1' -uut1_if_name="GigabitEthernet0/0" -uut2_if_name="Ethernet2/1" -vmcloud_server=nostg-ott-vm-7 -nxos_image=/auto/xrut/images/nxosv-7.2.0.ZD.0.134.s0.ova -orchestrator=dyntopo.xrut.BringUpWorker
+
+
+Launch IOSv/XRVR-multinode Topology on LaaS Server
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Launch a topology consisting of IOSv and NXOSv (Titanium) routers.
+
+::
+
+    python standalone_tests/standalone_ping_test.py -cli_topology='{ "n1": ( "ios-1",  "xrvr-1" )}' -router_requirements='{"xrvr-1": { "multinode" : True}}' -sim_dir=/tmp/$USER/xrut_sim_dir2  -default_type=iosxrv  -tb_yaml_output_file_name=/tmp/tb2.yaml -uut1_name='ios-1' -uut2_name='xrvr-1' -uut1_if_name="GigabitEthernet0/0" -uut2_if_name="GigabitEthernet0/2/0/0" -vmcloud_server=nostg-ott-vm-7
+
+
+Launch IOSv/XRVR-HA Topology on LaaS Server
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Launch a topology consisting of IOSv and XRVR HA routers.
+
+::
+
+    python standalone_tests/standalone_ping_test.py -cli_topology='{ "n1": ( "ios-1",  "xrvr-1" )}' -router_requirements='{"xrvr-1": { "standby" : True}}' -sim_dir=/tmp/$USER/xrut_sim_dir2  -default_type=iosxrv  -tb_yaml_output_file_name=/tmp/tb2.yaml -uut1_name='ios-1' -uut2_name='xrvr-1' -uut1_if_name="GigabitEthernet0/0" -uut2_if_name="GigabitEthernet0/2/0/0" -vmcloud_server=nostg-ott-vm-7
+
+
+Launch IOSv/CSR1000v Topology on LaaS Server
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Launch a topology consisting of IOSv and CSR1000v routers.
+
+::
+
+    python standalone_tests/standalone_ping_test.py -cli_topology='{ "n1": ( "ios-1",  "csr-1" )}' -default_type=iosv -sim_dir=/tmp/$USER/xrut_sim_dir2  -tb_yaml_output_file_name=/tmp/tb2.yaml -uut1_name='ios-1' -uut2_name='csr-1' -uut1_if_name="GigabitEthernet0/0" -uut2_if_name="GigabitEthernet1" -vmcloud_server=nostg-ott-vm-7
+
+
+Launch Moonshine/Moonshine Topology on UCS Server, testing via unicon
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Again, unicon must be specified in the test script itself, and you'll
+need a Moonshine host machine ($MOONSHINE_HOST) available, as well as
+a Moonshine image ($MOONSHINE_IMAGE).
+
+::
+
+    python standalone_tests/standalone_ping_test_unicon.py -cli_topology=-cli_topology='{ "n1": ( "moonshine-1", "moonshine-2" )}' -default_type=moonshine -tb_yaml_output_file_name /tmp/tb1.yaml -uut1_name 'moonshine-1' -uut2_name 'moonshine-2' -uut1_if_name="GigabitEthernet0/0/0/0" -uut2_if_name="GigabitEthernet0/0/0/0" -moonshine_host=$MOONSHINE_HOST -moonshine_image=$MOONSHINE_IMAGE -orchestrator=dyntopo.xrut.BringUpWorker
+ 
+
+Launch Moonshine/Moonshine Topology
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Launch a topology consisting of two Moonshine routers.
+
+You'll need to set the `moonshine_host` environment variable to a LaaS or UCS
+machine which supports Moonshine before running this test.
+
+
+In the first window::
+
+    xrutbringup -cli_topology='{ "n1": ( "moonshine-1", "moonshine-2" )}' -default_type=moonshine -no_mail -tb_yaml_output_file_name=/tmp/tb1.yaml -moonshine_host=<host machine> -moonshine_dir=<working dir on host machine> -moonshine_image=<path to moonshine image>
+
+
+In the second window::
+
+    python dyntopo/examples/dyntopo_xrut/standalone_tests/standalone_ping_test.py  -connect_to_existing_topology -testbed_file=/tmp/tb1.yaml -uut1_name='moonshine-1' -uut2_name='moonshine-2' -uut1_if_name="GigabitEthernet0/0/0/0" -uut2_if_name="GigabitEthernet0/0/0/0"
+
+In the first window, hit <Ctrl><C> to take down the previous testbed.
+
+
+
+Decoupled DT-style launch
+-------------------------
+
+Here are examples of a DT workflow showing how a testbed may be brought up
+with testbed and clean YAML files.  A script may then be run against that
+testbed repeatedly, while the testbed stays up.
+Finally, the user manually tears down the topology.
+
+.. note::
+    EnXR examples in this section hardcode a user-specific workspace location
+    in the clean file that will not work out of the box.
+    Please adjust the appropriate clean file accordingly
+    before running the example.
+
+
+::
+
+    mkdir -p /tmp/$USER/xrut_sim_dir3
+
+In the first window, execute one of the following commands:
+
+Launch IOL Topology
+^^^^^^^^^^^^^^^^^^^
+
+Launch a topology consisting of IOL routers.
+
+::
+
+    xrutbringup -logical_testbed_file yaml/iol_ping_test_config.yaml -clean_file yaml/iol_ping_bringup_config.yaml -sim_dir /tmp/$USER/xrut_sim_dir3 -no_mail -tb_yaml_output_file_name /tmp/tb3.yaml
+
+
+Launch IOS/EnXR Topology
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+Launch a topology consisting of an IOS Dynamips router and an HA EnXR router.
+Note the bringup log level has been specified as "debug", this turns on
+debug messages from the bringup modules, but not from the XR-UT subprocess.
+
+::
+
+    xrutbringup -logical_testbed_file yaml/ios_enxr_ping_test_config.yaml -clean_file yaml/ios_enxr_ping_bringup_config.yaml -workspace /nobackup/$USER/r60y -no_mail -tb_yaml_output_file_name /tmp/tb3.yaml -bringup_log_level debug
+
+
+Launch IOS/Moonshine Topology
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Launch a topology consisting of an IOS Dynamips router and an HA Moonshine
+router.  Note the bringup log level has been specified as "debug", this turns
+on debug messages from the bringup modules, but not from the XR-UT subprocess.
+
+You'll need to set the `moonshine_host` environment variable to a LaaS or UCS
+machine which supports Moonshine before running this test.
+
+::
+
+    xrutbringup -logical_testbed_file yaml/ios_moonshine_ping_test_config.yaml -clean_file yaml/ios_moonshine_ping_bringup_config.yaml -no_mail -tb_yaml_output_file_name /tmp/tb3.yaml -bringup_log_level debug
+
+
+
+Launch EnXR/XRVR Topology
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Launch a topology consisting of a simplex EnXR router and a simplex
+XRVR router.  This example  demonstrates that the workspace and sim_dir
+is set to the current working directory if not otherwise specified.
+It also shows that router images may be specified via environment
+variables.
+
+::
+
+    cd /nobackup/$USER/r60y
+    export xrvr_image=/auto/xrut/images/iosxrv.vmdk.old
+    xrutbringup -logical_testbed_file yaml/enxr_xrvr_ping_test_config.yaml -clean_file yaml/enxr_xrvr_ping_bringup_config_no_ws.yaml  -no_mail -tb_yaml_output_file_name /tmp/tb3.yaml -bringup_log_level debug
+
+
+Launch IOSv/NXOSv Topology on LaaS Server
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Launch a topology consisting of av IOSv router and a NXOSv (Titanium) router
+on a LaaS server.
+
+::
+
+    xrutbringup -logical_testbed_file yaml/ios_nxos_ping_test_config.yaml -clean_file yaml/ios_nxos_ping_bringup_config.yaml -no_mail -tb_yaml_output_file_name /tmp/tb3.yaml
+
+
+Launch IOSv/XRVR-multinode Topology on LaaS Server
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+On a LaaS backend, launch a topology consisting of av IOSv router and an XRVR router
+(consisting of a simulated RP and a simulated line card).
+
+::
+
+    xrutbringup -logical_testbed_file yaml/ios_xrvr_multinode_ping_test_config.yaml -clean_file yaml/ios_xrvr_multinode_ping_bringup_config.yaml -no_mail -tb_yaml_output_file_name /tmp/tb3.yaml
+
+
+Launch IOSv/XRVR-HA Topology on LaaS Server
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+On a LaaS backend, launch a topology consisting of av IOSv router and an XRVR router
+(consisting of a simulated active and standby RP and a simulated line card).
+
+::
+
+    xrutbringup -logical_testbed_file yaml/ios_xrvr_ha_ping_test_config.yaml -clean_file dyntopo_xrut/yaml/ios_xrvr_multinode_ping_bringup_config.yaml -no_mail -tb_yaml_output_file_name /tmp/tb3.yaml
+
+
+Launch IOSv/CSR1000v Topology on LaaS Server
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+On a LaaS backend, launch a topology consisting of av IOSv router and a CSR1000v
+router.
+
+::
+
+    xrutbringup -logical_testbed_file yaml/ios_csr_ping_test_config.yaml -clean_file yaml/ios_csr_ping_bringup_config.yaml -no_mail -tb_yaml_output_file_name /tmp/tb3.yaml
+
+
+Run the test script
+^^^^^^^^^^^^^^^^^^^
+
+In the second window run the same test script for all above launch variants::
+
+    easypy  jobs/ping_test_job.py -loglevel DEBUG -testbed_file /tmp/tb3.yaml
+
+
+In the first window, hit <Ctrl><C> to take down the previous testbed.
+
+
+Launch Moonshine/Moonshine Topology, via Unicon, and run a test script.
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Launch a topology consisting of two Moonshine routers.
+
+You'll need to set the `moonshine_host` environment variable to a LaaS or UCS
+machine which supports Moonshine before running this test.
+
+The bringup here uses a logical testbed file and a clean file, so that unicon can be specified as the connection implementation. The topology is also passed in.
+
+
+In the first window (also specify -xrut_base_dir="<XRUT directory>" if not using the default XRUT repo)::
+
+    xrutbringup -clean_file yaml/moonshine_clean.yaml -logical_testbed_file yaml/moonshine_moonshine_unicon_config.yaml -tb_yaml_output_file_name /tmp/tb1.yaml
+
+In the second window::
+
+    python standalone_tests/standalone_ping_test.py  -connect_to_existing_topology -testbed_file=/tmp/tb1.yaml -uut1_name='r1' -uut2_name='r2' -uut1_if_name="GigabitEthernet0/2/0/0" -uut2_if_name="GigabitEthernet0/2/0/0"
+
+In the first window, hit <Ctrl><C> to take down the previous testbed.
+
+
+Decoupled DT-style integrated launch and clean
+----------------------------------------------
+
+It is possible to bring up a topology and, once it has been launched, to
+invoke clean software on all or a portion of the devices in the topology.
+Typically clean software is run on physical devices, but this example
+shows a dummy clean being run on software-based devices.
+
+::
+
+    kleenex -clean_file yaml/iol_dummy_clean.yaml -loglevel DEBUG -logical_testbed_file yaml/iol_ping_test_config.yaml -bringup_log_level=debug
+
+
+Standalone DT-style launch
+--------------------------
+
+Here are examples of a DT workflow showing how a testbed may be brought up
+with testbed and clean YAML files, a script run against that testbed
+and then the testbed brought down, using only a single command.
+
+.. note::
+    EnXR examples in this section hardcode a user-specific workspace location
+    in the clean file that will not work out of the box.
+    Please adjust the appropriate clean file accordingly
+    before running the example.
+
+::
+
+    mkdir -p /tmp/$USER/xrut_sim_dir4
+
+Launch IOL Topology
+^^^^^^^^^^^^^^^^^^^
+
+Launch a topology consisting of IOL routers.
+
+::
+
+    python standalone_tests/standalone_ping_test.py -logical_testbed_file yaml/iol_ping_test_config.yaml -clean_file yaml/iol_ping_bringup_config.yaml -sim_dir /tmp/$USER/xrut_sim_dir4  -tb_yaml_output_file_name /tmp/tb4.yaml -uut1_name 'r1' -uut2_name 'r2' -uut1_if_name 'if1.1' -uut2_if_name 'if2.1'
+
+Launch IOS/EnXR-HA Topology
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Launch a topology consisting of an IOS Dynamips router and a HA EnXR router.
+
+::
+
+    python standalone_tests/standalone_ping_test.py -logical_testbed_file yaml/ios_enxr_ping_test_config.yaml -clean_file yaml/ios_enxr_ping_bringup_config.yaml -workspace /nobackup/$USER/r60y  -tb_yaml_output_file_name /tmp/tb4.yaml -uut1_name 'r1' -uut2_name 'r2' -uut1_if_name 'if1.1' -uut2_if_name 'if2.1'
+
+Launch IOS/Moonshine-HA Topology
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Launch a topology consisting of an IOS Dynamips router and a HA Moonshine router.
+
+You'll need to set the `moonshine_host` environment variable to a LaaS or UCS
+machine which supports Moonshine before running this test.
+
+::
+
+    python standalone_tests/standalone_ping_test.py -logical_testbed_file yaml/ios_moonshine_ping_test_config.yaml -clean_file yaml/ios_moonshine_ping_bringup_config.yaml -tb_yaml_output_file_name /tmp/tb4.yaml -uut1_name 'r1' -uut2_name 'r2' -uut1_if_name 'if1.1' -uut2_if_name 'if2.1'
+
+
+Launch EnXR/XRVR Topology
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Launch a topology consisting of a simplex EnXR router and a simplex
+XRVR router.
+
+::
+    cd /nobackup/$USER/r60y
+    python standalone_tests/standalone_ping_test.py -logical_testbed_file yaml/enxr_xrvr_ping_test_config.yaml -clean_file yaml/enxr_xrvr_ping_bringup_config_no_ws.yaml -workspace /nobackup/$USER/r60y -tb_yaml_output_file_name /tmp/tb4.yaml -bringup_log_level debug -xrvr_image '/auto/xrut/images/iosxrv.vmdk.old' -uut1_name 'r1' -uut2_name 'r2' -uut1_if_name 'if1.1' -uut2_if_name 'if2.1'
+
+
+
+Launch IOSv/NXOSv Topology on LaaS Server
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Launch a topology consisting of av IOSv router and a NXOSv (Titanium) router
+on a LaaS server.
+
+::
+
+    python standalone_tests/standalone_ping_test.py -logical_testbed_file yaml/ios_nxos_ping_test_config.yaml -clean_file yaml/ios_nxos_ping_bringup_config.yaml -sim_dir /tmp/$USER/xrut_sim_dir4 -tb_yaml_output_file_name /tmp/tb4.yaml -bringup_log_level debug  -uut1_name 'r1' -uut2_name 'r2' -uut1_if_name 'if1.1' -uut2_if_name 'if2.1'
+
+
+Launch IOSv/XRVR-multinode Topology on LaaS Server
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+On a LaaS backend, launch a topology consisting of av IOSv router and a XRVR router
+(consisting of a simulated active RP and simulated line card).
+
+::
+
+    python standalone_tests/standalone_ping_test.py -logical_testbed_file yaml/ios_xrvr_multinode_ping_test_config.yaml -clean_file yaml/ios_xrvr_multinode_ping_bringup_config.yaml -sim_dir /tmp/$USER/xrut_sim_dir4 -tb_yaml_output_file_name /tmp/tb4.yaml -bringup_log_level debug  -uut1_name 'r1' -uut2_name 'r2' -uut1_if_name 'if1.1' -uut2_if_name 'if2.1'
+
+
+Launch IOSv/XRVR-HA Topology on LaaS Server
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+On a LaaS backend, launch a topology consisting of av IOSv router and a XRVR router
+(consisting of a simulated active and standby RP and simulated line card).
+
+::
+
+    python standalone_tests/standalone_ping_test.py -logical_testbed_file yaml/ios_xrvr_ha_ping_test_config.yaml -clean_file dyntopo_xrut/yaml/ios_xrvr_multinode_ping_bringup_config.yaml -sim_dir /tmp/$USER/xrut_sim_dir4 -tb_yaml_output_file_name /tmp/tb4.yaml -bringup_log_level debug  -uut1_name 'r1' -uut2_name 'r2' -uut1_if_name 'if1.1' -uut2_if_name 'if2.1'
+
+
+Launch IOSv/CSR1000v Topology on LaaS Server
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+On a LaaS backend, launch a topology consisting of av IOSv router and a CSR1000v
+router.
+
+::
+
+    python standalone_tests/standalone_ping_test.py -logical_testbed_file yaml/ios_csr_ping_test_config.yaml -clean_file yaml/ios_csr_ping_bringup_config.yaml -sim_dir /tmp/$USER/xrut_sim_dir4 -tb_yaml_output_file_name /tmp/tb4.yaml -bringup_log_level debug  -uut1_name 'r1' -uut2_name 'r2' -uut1_if_name 'if1.1' -uut2_if_name 'if2.1'
+
+
+Launch Moonshine/Moonshine Topology on UCS Server, via Unicon
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Launch a topology consisting of Moonshine routers. Again, pass in the -xrut_base_dir option to specify a non-default XRUT repo to use.
+
+::
+
+    python standalone_tests/standalone_ping_test.py -logical_testbed_file yaml/moonshine_moonshine_unicon_config.yaml -clean_file yaml/moonshine_clean.yaml -tb_yaml_output_file_name /tmp/tb1.yaml -uut1_name 'r1' -uut2_name 'r2' -uut1_if_name 'if1.1' -uut2_if_name 'if2.1'
+
+
+
+
+easypy DT-style launch
+----------------------
+
+All-in-one command that launches a dynamic topology, runs a test and
+then tears down the topology.  All logs are placed in the runinfo directory,
+which is then archived and uploaded to TRADe.  The user receives an email
+containing the results of the run.  Unless otherwise specified,
+bringup is done at job scope.
+
+.. note::
+    Examples in this section hardcode a user-specific workspace location
+    in the clean file that will not work out of the box.
+    Please adjust the example clean file accordingly
+    before running the example.
+
+::
+
+    mkdir -p /tmp/$USER/xrut_sim_dir5
+
+Bring up IOL Topology
+^^^^^^^^^^^^^^^^^^^^^
+
+Launch a topology consisting of IOL routers.
+
+::
+
+    easypy jobs/ping_test_job.py  -logical_testbed_file yaml/iol_ping_test_config.yaml -clean_file yaml/iol_ping_bringup_config.yaml
+
+
+Now invoke a job file that runs two scripts sequentially.
+A separate dynamic topology is launched for each script.
+
+::
+
+    easypy jobs/ping_test_job_multiple_topo.py -logical_testbed_file yaml/iol_ping_test_config.yaml -clean_file yaml/iol_ping_bringup_config.yaml
+
+Bring up IOS/EnXR-HA Topology
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Launch a topology consisting of an IOS Dynamips router and an HA EnXR router.
+
+::
+
+    easypy jobs/ping_test_job.py -logical_testbed_file yaml/ios_enxr_ping_test_config.yaml -clean_file yaml/ios_enxr_ping_bringup_config.yaml
+
+Bring up IOS/Moonshine-HA Topology
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Launch a topology consisting of an IOS Dynamips router and an HA Moonshine router.
+
+You'll need to set the `moonshine_host` environment variable to a LaaS or UCS
+machine which supports Moonshine before running this test.
+
+::
+
+    easypy jobs/ping_test_job.py -logical_testbed_file yaml/ios_moonshine_ping_test_config.yaml -clean_file yaml/ios_moonshine_ping_bringup_config.yaml
+
+Bring up EnXR/XRVR Topology
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Launch a topology consisting of a simplex EnXR router and a simplex
+XRVR router.  Note how the workspace is specified with an environment
+variable.
+
+::
+
+    export XRUT_WS=/nobackup/$USER/r60y
+    easypy jobs/ping_test_job.py -logical_testbed_file yaml/enxr_xrvr_ping_test_config.yaml -clean_file yaml/enxr_xrvr_ping_bringup_config_no_ws.yaml
+
+Launch Multiple Parallel IOSv/NXOSv Topologies on LaaS Server
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+On a LaaS backend, launch multiple parallel topologies, with each topology
+consisting of a IOSv and a NXOSv (Titanium) router.
+
+::
+
+    easypy jobs/ping_test_job_multiple_async_topo.py -logical_testbed_file yaml/ios_nxos_ping_test_config.yaml -clean_file yaml/ios_nxos_ping_bringup_config.yaml -clean_scope=task
+
+
+Launch Multiple Parallel IOSv/XRVR Topologies on LaaS Server
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+On a LaaS backend, launch multiple parallel topologies, with each topology
+consisting of a IOSv and a simplex XRVR router.
+
+::
+
+    easypy jobs/ping_test_job_multiple_async_topo.py -logical_testbed_file yaml/ios_xrvr_ping_test_config.yaml -clean_file yaml/ios_xrvr_ping_bringup_config.yaml -clean_scope=task
+
+
+Launch Multiple Parallel IOSv/XRVR-multinode Topologies on LaaS Server
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+On a LaaS backend, launch multiple parallel topologies, with each topology
+consisting of a IOSv and a simplex multinode XRVR router consisting of a
+simulated RP and a simulated line card).
+
+::
+
+    easypy jobs/ping_test_job_multiple_async_topo.py -logical_testbed_file yaml/ios_xrvr_multinode_ping_test_config.yaml -clean_file yaml/ios_xrvr_multinode_ping_bringup_config.yaml -clean_scope=task
+
+
+Launch Multiple Parallel IOSv/XRVR-HA Topologies on LaaS Server
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+On a LaaS backend, launch multiple parallel topologies, with each topology
+consisting of a IOSv and an XRVR-HA router (consisting of a simulated active
+and standby RP and a simulated line card).
+
+::
+
+    easypy jobs/ping_test_job_multiple_async_topo.py -logical_testbed_file yaml/ios_xrvr_ha_ping_test_config.yaml -clean_file yaml/ios_xrvr_multinode_ping_bringup_config.yaml -clean_scope=task
+
+
+Launch Multiple Parallel IOSv/CSR1000v Topologies on LaaS Server
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+On a LaaS backend, launch multiple parallel topologies, with each topology
+consisting of a IOSv and a CSR1000v router.
+
+::
+
+    easypy jobs/ping_test_job_multiple_async_topo.py -logical_testbed_file yaml/ios_csr_ping_test_config.yaml -clean_file yaml/ios_csr_ping_bringup_config.yaml -clean_scope=task
+
+
+Launch Multiple Parallel IOS/Moonshine-HA Topology
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Launch multiple parallel topologies consisting of an IOS Dynamips router and an
+HA Moonshine router.
+
+You'll need to set the `moonshine_host` environment variable to a LaaS or UCS
+machine which supports Moonshine before running this test.
+
+::
+
+    easypy jobs/ping_test_job_multiple_async_topo.py -logical_testbed_file yaml/ios_moonshine_ping_test_config.yaml -clean_file yaml/ios_moonshine_ping_bringup_config.yaml -clean_scope=task
+
+
+Launch Moonshine/Moonshine Topology via Unicon
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+easypy jobs/ping_test_job.py -logical_testbed_file yaml/moonshine_moonshine_unicon_config.yaml -clean_file yaml/moonshine_clean.yaml
+
+
+
+easypy DT-style integrated launch and clean
+-------------------------------------------
+
+It is possible to bring up a topology and, once it has been launched, to
+invoke clean software on all or a portion of the devices in the topology
+before running the user scripts in the jobfile.  Typically clean software
+is run on physical devices, but this example shows a dummy clean being run
+on software-based devices.
+
+::
+
+    easypy jobs/ping_test_job_multiple_topo.py -logical_testbed_file yaml/iol_ping_test_config.yaml -clean_file yaml/iol_dummy_clean.yaml
