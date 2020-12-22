@@ -1,0 +1,130 @@
+
+.. note::
+
+        This document may be found in the `examples/dyntopo_vxr` directory
+        of a pyATS environment.  All examples assume this is the
+        current working directory.
+
+        For better viewing/reading of this document, use restview_.
+
+        .. _restview: https://pypi.python.org/pypi/restview
+
+        For example::
+
+            pip install restview
+            restview -l 0:8080 README.rst
+
+        And then browse to http://your_machine:8080
+
+
+Please refer to the bringup `online documentation`_.
+
+.. _online documentation: http://wwwin-pyats.cisco.com/cisco-shared/html/dyntopo/docs/index.html
+
+
+Examples of Dynamic Topology Bringup on a VXR Backend
+=====================================================
+
+Here are examples of various workflows for bringing up a
+dynamic topology under pyATS and running tests against it:
+
+1. `Decoupled launch`_
+
+2. `Standalone launch`_
+
+3. `easypy launch`_
+
+
+Decoupled launch
+----------------
+Here are examples of a DT workflow showing how a testbed may be brought up
+with testbed and clean YAML files.  A script may then be run against that
+testbed repeatedly, while the testbed stays up.
+Finally, the user manually tears down the topology.
+
+In the first window, execute one of the following commands:
+
+Launch a sample router topology
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Launch a topology consisting of two xrv9k routers.
+
+.. note::
+    The command ``vxrbringup`` is equivalent to the command
+    ``kleenex -orchestrator=dyntopo.vxr.BringUpWorker``.
+
+::
+    vxrbringup -no_mail -clean_file yaml/xrv9k_clean.yaml -logical_testbed_file/yaml/xrv9k_testbed.yaml -tb_yaml_output_file_name pyats_testbed.yaml -no_remote_copy
+
+Make a manual connection to the xrv9k Topology
+""""""""""""""""""""""""""""""""""""""""""""""
+In the second window:
+
+.. code-block:: python
+
+    python
+    from ats.topology import loader
+    t = loader.load('pyats_testbed.yaml')
+    d = t.devices['r0']
+    d.connect(learn_hostname=True)
+    d.execute("show interface")
+    from ats import tcl
+    tcl.eval('package require cAAs')
+    tcl.q.abstract(device=d.handle, exec="show interface FastEthernet0/0")
+    d.disconnect()
+    exit()
+
+In the first window, hit <Ctrl><C> to take down the previous testbed.
+
+Launch asr9k, xrv9k, spitfire, ixia, spirent devices
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Launch a topology consisting of all supported platforms
+
+::
+    vxrbringup -no_mail -clean_file yaml/clean.yaml -logical_testbed_file yaml/testbed.yaml -tb_yaml_output_file_name pyats_testbed.yaml -no_remote_copy
+Standalone launch
+-----------------
+Here are examples of a DT workflow showing how a testbed may be brought up
+with testbed and clean YAML files, a script run against that testbed
+and then the testbed brought down, using only a single command.
+
+Launch IOS Topology
+^^^^^^^^^^^^^^^^^^^
+Launch a topology consisting of IOS routers.
+
+::
+    python tests/standalone_connect_test.py -logical_testbed_file yaml/xrv9k_testbed.yaml -clean_file yaml/xrv9k_clean.yaml
+
+easypy launch
+-------------
+
+All-in-one command that launches a dynamic topology, runs a test and
+then tears down the topology.  All logs are placed in the runinfo directory,
+which is then archived and uploaded to TRADe.  The user receives an email
+containing the results of the run.
+
+Bring up IOSXRv9k (Sunstone) Topology
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Launch a topology of two interconnected Sunstone devices on a vxr server,
+connect to the devices and then tear down the topology.
+
+::
+    easypy jobs/connect_test_job.py -logical_testbed_file yaml/xrv9k_testbed.yaml -clean_file yaml/xrv9k_clean.yaml -clean_scope=task
+
+
+Bring up IOSXRv9k (Sunstone) Topology and run a Genie Ping Test
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Launch a topology of two interconnected Sunstone devices on a vxr server,
+run a test to send two-directional pings between the devices and then
+tear down the topology.
+
+.. note::
+    This example requires the following commands to be executed:
+
+    ::
+      pip install --upgrade genie
+
+::
+    easypy jobs/genie_ping_job.py -logical_testbed_file yaml/xrv9k_testbed.yaml -clean_file yaml/xrv9k_clean.yaml -no_remote_copy --uut_alias uut --helper_alias helper
+
