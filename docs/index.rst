@@ -8,6 +8,7 @@ dynamic topologies.
 
    README
    laas/index
+   laasv2/index
    vxr/index
    xrut/index
    local/index

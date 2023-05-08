@@ -46,7 +46,7 @@ To build the docs locally on your machine. Please follow the instructions below
   
 - In your terminal, clone the repo using the command shown below: ``git clone https://github.com/<your_github_username>/dyntopo.git``
 
-- ``cd dyntopo/docs``
+- ``cd dyntopo``
   
 - Use ``make install_build_deps```  to install all of the build dependencies
   
