@@ -213,7 +213,7 @@ Below you can find an example of how to use pyATS clean:
 
 .. code-block:: text
 
-    pyats clean --logical-testbed-file logical_tb.yaml --clean-file clean.yaml
+    pyats clean -logical_testbed_file logical_tb.yaml --clean-file clean.yaml
 
 Running pyats run job
 ---------------------
