@@ -190,10 +190,10 @@ Running pyats clean
 As previously mentioned, one of the possible ways to create a topology and run tests over it is to run ``pyats clean``.
 pyATS Clean expects a clean YAML file and a logical testbed YAML file. 
 
-Once the topology is requested, it will make a reservation of the topology and return the merged testbed YAML file (named ``merged_testbed.yaml``) in the current working directory.
+Once the topology is requested, it will make a reservation of the topology and store the testbed in a testbed YAML file named ``merged_testbed.yaml``.
 This file can be used to run other tests, like interacting with the devices using ``pyats shell``, for example.
 pyATS Clean will halt its execution waiting for the user to press ``Ctrl + C`` to delete the reservation and free the resources.
-Below you can find an example of how to use pyATS clean:
+Below, you can find an example of how to use pyATS clean:
 
 .. code-block:: text
 
@@ -205,9 +205,9 @@ Running pyats run job
 If you are only interested in bringing up a topology for a single job run, you can do that using ``pyats run job``.
 pyATS will expect the same arguments, i.e., a clean YAML file and a logical testbed YAML file.
 
-Once the topology is requested, it will make a reservation of the topology, create the merged testbed YAML file (named ``merged_testbed.yaml``) in the current working directory.
+Once the topology is requested, it will make a reservation of the topology, and create ``merged_testbed.yaml``.
 The difference this time, is that the execution will not be halted. pyATS will use the merged testbed to connect to the devices and use the job script to interact with the topology.
-Below you can find an example of how to use pyATS run job:
+An example of how to use pyATS run job can be seen below:
 
 .. code-block:: text
 
@@ -215,6 +215,25 @@ Below you can find an example of how to use pyATS run job:
 
 .. note::
     Note how this alternative requires a job script. If you need more information on how to run jobs using pyATS, please refer to `pyATS documentation <https://developer.cisco.com/docs/pyats/>`_.
+
+Authenticating
+--------------
+
+The first time you run a job/clean, you will be prompted to authenticate using your credentials.
+The prompt will look like the following:
+
+.. code-block:: text
+  :emphasize-lines: 3
+
+  2023-05-12T13:56:35: %KLEENEX-INFO: Launching topology...
+  2023-05-12T13:56:35: %DYNTOPO-INFO: Please authenticate with user your_user_name
+  Password: 
+  2023-05-12T13:56:48: %DYNTOPO-INFO: Reservation state: ST_PENDING
+  2023-05-12T13:56:55: %DYNTOPO-INFO: Reservation state: ST_RESOLVING_DEVICES
+  2023-05-12T13:57:01: %DYNTOPO-INFO: Reservation state: ST_RESOLVING_DEVICES
+
+The next time you run a job/clean, you will not have to authenticate again, as dyntopo will handle the access token for you.
+A new token will be generated once the current one expires.
 
 Limitations
 -----------
