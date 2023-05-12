@@ -32,17 +32,6 @@ To upgrade to the latest version:
     pip uninstall dyntopo
     pip install --upgrade dyntopo.laasv2
 
-Post-Installation Requirements
-------------------------------
-
-- You will need an NG token to be able to interact with LaasV2. You can obtain a token `here <https://ngdevx.cisco.com/services/token>`_.
-
-- Tokens expire after a certain amount of time and you will either need to refresh the token or request a new one.
-
-- For the moment, you will need to add the token to the clean file that will be used with pyats. You can find an example of this in the section :ref:`_laasv2_invoke`::.
-
-.. _laasv2_invoke:
-
 How to invoke
 -------------
 
@@ -61,8 +50,6 @@ You should also pass a `laasv2` arguments to `bringup`. This argument accepts th
 
 - **domain:** The domain ID (obtained from LaaSv2).
 - **reservation_duration_hours:** The duration of the reservation (in hours). Defaults to 8 hours.
-- **auth_provider:** `dyntopo.laasv2.client.auth.TokenProvider` should be provided.
-- **provider_args:** Expects a `token` argument with the token obtained from NG platform.
 
 Below, you can find an example of how the `bringup` block could be declared:
 
@@ -74,9 +61,6 @@ Below, you can find an example of how the `bringup` block could be declared:
       laasv2:
         domain: 0a1b20cd-...
         reservation_duration_hours: 8
-        auth_provider: dyntopo.laasv2.client.auth.TokenProvider
-          provider_args:
-            token: abcdedfgh...
 
 For more details on other arguments that can be passed to `bringup`, see the :ref:`dyntopo clean schema` and :ref:`schema`.
 
@@ -235,6 +219,4 @@ Below you can find an example of how to use pyATS run job:
 Limitations
 -----------
 
-- Currently, it is not possible to get the NG tokens dynamically, so it is the user`s responsibility to update the tokens in the clean YAML file.
-
-- It is not possible to determine the capability of a link via logical testbed YAML file yet. An enhancement will be made to support this feature.
+- Currently, it is not possible to determine the capability of a link via logical testbed YAML file yet. An enhancement will be made to support this feature.

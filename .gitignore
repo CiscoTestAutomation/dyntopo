@@ -1,0 +1,6 @@
+__build__/
+__pycache__
+
+# .vscode
+.vscode
+.history
